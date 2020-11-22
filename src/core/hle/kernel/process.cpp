@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <bitset>
+#include <ctime>
 #include <memory>
 #include <random>
 #include "common/alignment.h"
@@ -123,7 +124,7 @@ std::shared_ptr<Process> Process::Create(Core::System& system, std::string name,
                                                               : kernel.CreateNewUserProcessID();
     process->capabilities.InitializeForMetadatalessProcess();
 
-    std::mt19937 rng(Settings::values.rng_seed.GetValue().value_or(0));
+    std::mt19937 rng(Settings::values.rng_seed.GetValue().value_or(std::time(nullptr)));
     std::uniform_int_distribution<u64> distribution;
     std::generate(process->random_entropy.begin(), process->random_entropy.end(),
                   [&] { return distribution(rng); });

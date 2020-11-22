@@ -751,7 +751,7 @@ void ICommonStateGetter::GetDefaultDisplayResolution(Kernel::HLERequestContext& 
     IPC::ResponseBuilder rb{ctx, 4};
     rb.Push(RESULT_SUCCESS);
 
-    if (Settings::values.use_docked_mode) {
+    if (Settings::values.use_docked_mode.GetValue()) {
         rb.Push(static_cast<u32>(Service::VI::DisplayResolution::DockedWidth) *
                 static_cast<u32>(Settings::values.resolution_factor.GetValue()));
         rb.Push(static_cast<u32>(Service::VI::DisplayResolution::DockedHeight) *
@@ -824,7 +824,7 @@ void IStorage::Open(Kernel::HLERequestContext& ctx) {
 }
 
 void ICommonStateGetter::GetOperationMode(Kernel::HLERequestContext& ctx) {
-    const bool use_docked_mode{Settings::values.use_docked_mode};
+    const bool use_docked_mode{Settings::values.use_docked_mode.GetValue()};
     LOG_DEBUG(Service_AM, "called, use_docked_mode={}", use_docked_mode);
 
     IPC::ResponseBuilder rb{ctx, 3};
@@ -1201,6 +1201,8 @@ IApplicationFunctions::IApplicationFunctions(Core::System& system_)
         {151, nullptr, "TryPopFromNotificationStorageChannel"},
         {160, nullptr, "GetHealthWarningDisappearedSystemEvent"},
         {170, nullptr, "SetHdcpAuthenticationActivated"},
+        {180, nullptr, "GetLaunchRequiredVersion"},
+        {181, nullptr, "UpgradeLaunchRequiredVersion"},
         {500, nullptr, "StartContinuousRecordingFlushForDebug"},
         {1000, nullptr, "CreateMovieMaker"},
         {1001, nullptr, "PrepareForJit"},
@@ -1379,13 +1381,16 @@ void IApplicationFunctions::GetDisplayVersion(Kernel::HLERequestContext& ctx) {
     const auto res = [this] {
         const auto title_id = system.CurrentProcess()->GetTitleID();
 
-        FileSys::PatchManager pm{title_id};
+        const FileSys::PatchManager pm{title_id, system.GetFileSystemController(),
+                                       system.GetContentProvider()};
         auto res = pm.GetControlMetadata();
         if (res.first != nullptr) {
             return res;
         }
 
-        FileSys::PatchManager pm_update{FileSys::GetUpdateTitleID(title_id)};
+        const FileSys::PatchManager pm_update{FileSys::GetUpdateTitleID(title_id),
+                                              system.GetFileSystemController(),
+                                              system.GetContentProvider()};
         return pm_update.GetControlMetadata();
     }();
 
@@ -1413,13 +1418,16 @@ void IApplicationFunctions::GetDesiredLanguage(Kernel::HLERequestContext& ctx) {
     const auto res = [this] {
         const auto title_id = system.CurrentProcess()->GetTitleID();
 
-        FileSys::PatchManager pm{title_id};
+        const FileSys::PatchManager pm{title_id, system.GetFileSystemController(),
+                                       system.GetContentProvider()};
         auto res = pm.GetControlMetadata();
         if (res.first != nullptr) {
             return res;
         }
 
-        FileSys::PatchManager pm_update{FileSys::GetUpdateTitleID(title_id)};
+        const FileSys::PatchManager pm_update{FileSys::GetUpdateTitleID(title_id),
+                                              system.GetFileSystemController(),
+                                              system.GetContentProvider()};
         return pm_update.GetControlMetadata();
     }();
 

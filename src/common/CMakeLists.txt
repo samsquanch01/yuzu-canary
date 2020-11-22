@@ -102,6 +102,7 @@ add_library(common STATIC
     atomic_ops.h
     detached_tasks.cpp
     detached_tasks.h
+    bit_cast.h
     bit_field.h
     bit_util.h
     cityhash.cpp
@@ -150,6 +151,8 @@ add_library(common STATIC
     scope_exit.h
     spin_lock.cpp
     spin_lock.h
+    stream.cpp
+    stream.h
     string_util.cpp
     string_util.h
     swap.h
@@ -186,6 +189,22 @@ if(ARCHITECTURE_x86_64)
             x64/xbyak_abi.h
             x64/xbyak_util.h
     )
+endif()
+
+if (MSVC)
+  target_compile_definitions(common PRIVATE
+    # The standard library doesn't provide any replacement for codecvt yet
+    # so we can disable this deprecation warning for the time being.
+    _SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING
+  )
+  target_compile_options(common PRIVATE
+    /W4
+    /WX
+  )
+else()
+  target_compile_options(common PRIVATE
+    -Werror
+  )
 endif()
 
 create_target_directory_groups(common)

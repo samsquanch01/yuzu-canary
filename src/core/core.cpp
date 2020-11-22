@@ -179,16 +179,18 @@ struct System::Impl {
         arp_manager.ResetAll();
 
         telemetry_session = std::make_unique<Core::TelemetrySession>();
+
+        gpu_core = VideoCore::CreateGPU(emu_window, system);
+        if (!gpu_core) {
+            return ResultStatus::ErrorVideoCore;
+        }
+
         service_manager = std::make_shared<Service::SM::ServiceManager>(kernel);
 
         Service::Init(service_manager, system);
         GDBStub::DeferStart();
 
         interrupt_manager = std::make_unique<Core::Hardware::InterruptManager>(system);
-        gpu_core = VideoCore::CreateGPU(emu_window, system);
-        if (!gpu_core) {
-            return ResultStatus::ErrorVideoCore;
-        }
 
         // Initialize time manager, which must happen after kernel is created
         time_manager.Initialize();
@@ -208,7 +210,7 @@ struct System::Impl {
 
     ResultStatus Load(System& system, Frontend::EmuWindow& emu_window,
                       const std::string& filepath) {
-        app_loader = Loader::GetLoader(GetGameFileFromPath(virtual_filesystem, filepath));
+        app_loader = Loader::GetLoader(system, GetGameFileFromPath(virtual_filesystem, filepath));
         if (!app_loader) {
             LOG_CRITICAL(Core, "Failed to obtain loader for {}!", filepath);
             return ResultStatus::ErrorGetLoader;
@@ -222,7 +224,7 @@ struct System::Impl {
             return init_result;
         }
 
-        telemetry_session->AddInitialInfo(*app_loader);
+        telemetry_session->AddInitialInfo(*app_loader, fs_controller, *content_provider);
         auto main_process =
             Kernel::Process::Create(system, "main", Kernel::Process::ProcessType::Userland);
         const auto [load_result, load_parameters] = app_loader->Load(*main_process, system);
@@ -336,7 +338,7 @@ struct System::Impl {
         Service::Glue::ApplicationLaunchProperty launch{};
         launch.title_id = process.GetTitleID();
 
-        FileSys::PatchManager pm{launch.title_id};
+        FileSys::PatchManager pm{launch.title_id, fs_controller, *content_provider};
         launch.version = pm.GetGameVersion().value_or(0);
 
         // TODO(DarkLordZach): When FSController/Game Card Support is added, if

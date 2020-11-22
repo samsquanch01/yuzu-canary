@@ -11,6 +11,7 @@
 #include "common/string_util.h"
 #include "common/swap.h"
 #include "core/constants.h"
+#include "core/core.h"
 #include "core/core_timing.h"
 #include "core/file_sys/control_metadata.h"
 #include "core/file_sys/patch_manager.h"
@@ -741,8 +742,10 @@ void Module::Interface::IsUserAccountSwitchLocked(Kernel::HLERequestContext& ctx
     bool is_locked = false;
 
     if (res != Loader::ResultStatus::Success) {
-        FileSys::PatchManager pm{system.CurrentProcess()->GetTitleID()};
-        auto nacp_unique = pm.GetControlMetadata().first;
+        const FileSys::PatchManager pm{system.CurrentProcess()->GetTitleID(),
+                                       system.GetFileSystemController(),
+                                       system.GetContentProvider()};
+        const auto nacp_unique = pm.GetControlMetadata().first;
 
         if (nacp_unique != nullptr) {
             is_locked = nacp_unique->GetUserAccountSwitchLock();

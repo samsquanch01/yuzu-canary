@@ -10,6 +10,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QScreen>
+#include <QString>
 #include <QStringList>
 #include <QWindow>
 
@@ -381,7 +382,12 @@ void GRenderWindow::keyReleaseEvent(QKeyEvent* event) {
 }
 
 void GRenderWindow::mousePressEvent(QMouseEvent* event) {
-    // touch input is handled in TouchBeginEvent
+    if (!Settings::values.touchscreen.enabled) {
+        input_subsystem->GetKeyboard()->PressKey(event->button());
+        return;
+    }
+
+    // Touch input is handled in TouchBeginEvent
     if (event->source() == Qt::MouseEventSynthesizedBySystem) {
         return;
     }
@@ -397,7 +403,7 @@ void GRenderWindow::mousePressEvent(QMouseEvent* event) {
 }
 
 void GRenderWindow::mouseMoveEvent(QMouseEvent* event) {
-    // touch input is handled in TouchUpdateEvent
+    // Touch input is handled in TouchUpdateEvent
     if (event->source() == Qt::MouseEventSynthesizedBySystem) {
         return;
     }
@@ -410,7 +416,12 @@ void GRenderWindow::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void GRenderWindow::mouseReleaseEvent(QMouseEvent* event) {
-    // touch input is handled in TouchEndEvent
+    if (!Settings::values.touchscreen.enabled) {
+        input_subsystem->GetKeyboard()->ReleaseKey(event->button());
+        return;
+    }
+
+    // Touch input is handled in TouchEndEvent
     if (event->source() == Qt::MouseEventSynthesizedBySystem) {
         return;
     }
@@ -603,19 +614,33 @@ bool GRenderWindow::LoadOpenGL() {
     auto context = CreateSharedContext();
     auto scope = context->Acquire();
     if (!gladLoadGL()) {
-        QMessageBox::critical(this, tr("Error while initializing OpenGL 4.3!"),
-                              tr("Your GPU may not support OpenGL 4.3, or you do not have the "
-                                 "latest graphics driver."));
+        QMessageBox::warning(
+            this, tr("Error while initializing OpenGL!"),
+            tr("Your GPU may not support OpenGL, or you do not have the latest graphics driver."));
+        return false;
+    }
+
+    const QString renderer =
+        QString::fromUtf8(reinterpret_cast<const char*>(glGetString(GL_RENDERER)));
+
+    if (!GLAD_GL_VERSION_4_3) {
+        LOG_ERROR(Frontend, "GPU does not support OpenGL 4.3: {}", renderer.toStdString());
+        QMessageBox::warning(this, tr("Error while initializing OpenGL 4.3!"),
+                             tr("Your GPU may not support OpenGL 4.3, or you do not have the "
+                                "latest graphics driver.<br><br>GL Renderer:<br>%1")
+                                 .arg(renderer));
         return false;
     }
 
     QStringList unsupported_gl_extensions = GetUnsupportedGLExtensions();
     if (!unsupported_gl_extensions.empty()) {
-        QMessageBox::critical(
+        QMessageBox::warning(
             this, tr("Error while initializing OpenGL!"),
             tr("Your GPU may not support one or more required OpenGL extensions. Please ensure you "
-               "have the latest graphics driver.<br><br>Unsupported extensions:<br>") +
-                unsupported_gl_extensions.join(QStringLiteral("<br>")));
+               "have the latest graphics driver.<br><br>GL Renderer:<br>%1<br><br>Unsupported "
+               "extensions:<br>%2")
+                .arg(renderer)
+                .arg(unsupported_gl_extensions.join(QStringLiteral("<br>"))));
         return false;
     }
     return true;
@@ -645,8 +670,13 @@ QStringList GRenderWindow::GetUnsupportedGLExtensions() const {
     if (!GLAD_GL_ARB_depth_buffer_float)
         unsupported_ext.append(QStringLiteral("ARB_depth_buffer_float"));
 
-    for (const QString& ext : unsupported_ext)
-        LOG_CRITICAL(Frontend, "Unsupported GL extension: {}", ext.toStdString());
+    if (!unsupported_ext.empty()) {
+        LOG_ERROR(Frontend, "GPU does not support all required extensions: {}",
+                  glGetString(GL_RENDERER));
+    }
+    for (const QString& ext : unsupported_ext) {
+        LOG_ERROR(Frontend, "Unsupported GL extension: {}", ext.toStdString());
+    }
 
     return unsupported_ext;
 }

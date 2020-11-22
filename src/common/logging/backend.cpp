@@ -222,6 +222,7 @@ void DebuggerBackend::Write(const Entry& entry) {
     SUB(Service, NPNS)                                                                             \
     SUB(Service, NS)                                                                               \
     SUB(Service, NVDRV)                                                                            \
+    SUB(Service, OLSC)                                                                             \
     SUB(Service, PCIE)                                                                             \
     SUB(Service, PCTL)                                                                             \
     SUB(Service, PCV)                                                                              \
@@ -274,7 +275,6 @@ const char* GetLogClassName(Class log_class) {
     case Class::Count:
         break;
     }
-    UNREACHABLE();
     return "Invalid";
 }
 
@@ -293,7 +293,6 @@ const char* GetLevelName(Level log_level) {
         break;
     }
 #undef LVL
-    UNREACHABLE();
     return "Invalid";
 }
 

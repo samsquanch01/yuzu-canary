@@ -18,8 +18,6 @@ CMAKE_DEPENDENT_OPTION(YUZU_USE_BUNDLED_QT "Download bundled Qt binaries" ON "EN
 
 option(ENABLE_WEB_SERVICE "Enable web services (telemetry, etc.)" ON)
 
-option(YUZU_USE_BUNDLED_UNICORN "Build/Download bundled Unicorn" ON)
-
 option(YUZU_USE_QT_WEB_ENGINE "Use QtWebEngine for web applet implementation" OFF)
 
 option(YUZU_ENABLE_BOXCAT "Enable the Boxcat service, a yuzu high-level implementation of BCAT" ON)
@@ -161,7 +159,7 @@ macro(yuzu_find_packages)
     #    Cmake Pkg Prefix  Version     Conan Pkg
         "Boost             1.73        boost/1.73.0"
         "Catch2            2.13        catch2/2.13.0"
-        "fmt               7.0         fmt/7.0.3"
+        "fmt               7.1         fmt/7.1.2"
     # can't use until https://github.com/bincrafters/community/issues/1173
         #"libzip            1.5         libzip/1.5.2@bincrafters/stable"
         "lz4               1.8         lz4/1.9.2"
@@ -263,6 +261,7 @@ if (CONAN_REQUIRED_LIBS)
         libzip:with_openssl=False
         libzip:enable_windows_crypto=False
     )
+
     conan_check(VERSION 1.24.0 REQUIRED)
     # Add the bincrafters remote
     conan_add_remote(NAME bincrafters
@@ -354,84 +353,22 @@ if (NOT LIBUSB_FOUND)
     set(LIBUSB_LIBRARIES usb)
 endif()
 
+# Use system installed ffmpeg.
+if (NOT MSVC)
+    find_package(FFmpeg REQUIRED)
+else()
+    set(FFMPEG_EXT_NAME "ffmpeg-4.2.1")
+    set(FFMPEG_PATH "${CMAKE_BINARY_DIR}/externals/${FFMPEG_EXT_NAME}")
+    download_bundled_external("ffmpeg/" ${FFMPEG_EXT_NAME} "")
+    set(FFMPEG_FOUND YES)
+    set(FFMPEG_INCLUDE_DIR "${FFMPEG_PATH}/include" CACHE PATH "Path to FFmpeg headers" FORCE)
+    set(FFMPEG_LIBRARY_DIR "${FFMPEG_PATH}/bin" CACHE PATH "Path to FFmpeg library" FORCE)
+    set(FFMPEG_DLL_DIR "${FFMPEG_PATH}/bin" CACHE PATH "Path to FFmpeg dll's" FORCE)
+endif()
+
 # Prefer the -pthread flag on Linux.
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
-
-# If unicorn isn't found, msvc -> download bundled unicorn; everyone else -> build external
-if (YUZU_USE_BUNDLED_UNICORN)
-    if (MSVC)
-        message(STATUS "unicorn not found, falling back to bundled")
-        # Detect toolchain and platform
-        if ((MSVC_VERSION GREATER_EQUAL 1910 AND MSVC_VERSION LESS 1930) AND ARCHITECTURE_x86_64)
-            set(UNICORN_VER "unicorn-yuzu")
-        else()
-            message(FATAL_ERROR "No bundled Unicorn binaries for your toolchain. Disable YUZU_USE_BUNDLED_UNICORN and provide your own.")
-        endif()
-
-        if (DEFINED UNICORN_VER)
-            download_bundled_external("unicorn/" ${UNICORN_VER} UNICORN_PREFIX)
-        endif()
-
-        if (DEFINED UNICORN_VER)
-            download_bundled_external("unicorn/" ${UNICORN_VER} UNICORN_PREFIX)
-        endif()
-
-        set(UNICORN_FOUND YES)
-        set(LIBUNICORN_INCLUDE_DIR "${UNICORN_PREFIX}/include" CACHE PATH "Path to Unicorn headers" FORCE)
-        set(LIBUNICORN_LIBRARY "${UNICORN_PREFIX}/lib/x64/unicorn_dynload.lib" CACHE PATH "Path to Unicorn library" FORCE)
-        set(UNICORN_DLL_DIR "${UNICORN_PREFIX}/lib/x64/" CACHE PATH "Path to unicorn.dll" FORCE)
-    else()
-        message(STATUS "unicorn not found, falling back to externals")
-        if (MINGW)
-            set(UNICORN_LIB_NAME "unicorn.a")
-        else()
-            set(UNICORN_LIB_NAME "libunicorn.a")
-        endif()
-
-        set(UNICORN_FOUND YES)
-        set(UNICORN_PREFIX ${PROJECT_SOURCE_DIR}/externals/unicorn)
-        set(LIBUNICORN_LIBRARY "${UNICORN_PREFIX}/${UNICORN_LIB_NAME}" CACHE PATH "Path to Unicorn library" FORCE)
-        set(LIBUNICORN_INCLUDE_DIR "${UNICORN_PREFIX}/include" CACHE PATH "Path to Unicorn headers" FORCE)
-        set(UNICORN_DLL_DIR "${UNICORN_PREFIX}/" CACHE PATH "Path to unicorn dynamic library" FORCE)
-
-        find_package(PythonInterp 2.7 REQUIRED)
-
-        if (MINGW)
-            # Intentionally call the unicorn makefile directly instead of using make.sh so that we can override the
-            # UNAME_S makefile variable to MINGW. This way we don't have to hack at the uname binary to build
-            # Additionally, overriding DO_WINDOWS_EXPORT prevents unicorn from patching the static unicorn.a by using msvc and cmd,
-            # which are both things we don't have in a mingw cross compiling environment.
-            add_custom_command(OUTPUT ${LIBUNICORN_LIBRARY}
-                COMMAND ${CMAKE_COMMAND} -E env UNICORN_ARCHS="aarch64" PYTHON="${PYTHON_EXECUTABLE}" CC=x86_64-w64-mingw32-gcc AR=x86_64-w64-mingw32-gcc-ar RANLIB=x86_64-w64-mingw32-gcc-ranlib make UNAME_S=MINGW DO_WINDOWS_EXPORT=0
-                WORKING_DIRECTORY ${UNICORN_PREFIX}
-            )
-        else()
-            add_custom_command(OUTPUT ${LIBUNICORN_LIBRARY}
-                COMMAND ${CMAKE_COMMAND} -E env UNICORN_ARCHS="aarch64" PYTHON="${PYTHON_EXECUTABLE}" /bin/sh make.sh macos-universal-no
-                WORKING_DIRECTORY ${UNICORN_PREFIX}
-            )
-        endif()
-
-        # ALL makes this custom target build every time
-        # but it won't actually build if LIBUNICORN_LIBRARY is up to date
-        add_custom_target(unicorn-build ALL
-            DEPENDS ${LIBUNICORN_LIBRARY}
-        )
-        unset(UNICORN_LIB_NAME)
-    endif()
-else()
-    find_package(Unicorn REQUIRED)
-endif()
-
-if (UNICORN_FOUND)
-    add_library(unicorn INTERFACE)
-    add_dependencies(unicorn unicorn-build)
-    target_link_libraries(unicorn INTERFACE "${LIBUNICORN_LIBRARY}")
-    target_include_directories(unicorn INTERFACE "${LIBUNICORN_INCLUDE_DIR}")
-else()
-    message(FATAL_ERROR "Could not find or build unicorn which is required.")
-endif()
 
 # Platform-specific library requirements
 # ======================================
